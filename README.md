@@ -11,7 +11,8 @@ Chroma Auditor is a self-contained tool that enables business users to:
 - Build confidence in RAG by providing traceability
 - Have basic tools to fix/organize chunks if needed
 
-Our philosophy here is to make this a relatively simple tool for a relatively simple user who may have limited programming experience..
+Our philosophy here is to make this a relatively simple tool for a relatively simple user who may have limited programming experience.
+
 ### Target Audience
 
 This tool is designed for users in light-commercial businesses that want visibility into how their documents are being processed in RAG systems. While these organizations may have technical support for setting up AI chat systems, end users appreciate transparency into document processing.
@@ -335,19 +336,10 @@ This project is licensed under the MIT License - see [LICENSE.md](LICENSE.md) fo
 
 ## Contact
 
-- Issues: Please use the GitHub issue tracker
-- Questions: [Your preferred contact method]
-- Support: [Support information]
+dev@integralbi.ai
 
 ## Acknowledgments
 
-- ChromaDB team for the vector database
-- Gradio team for the web interface framework
-- Langflow project for document processing
-- All contributors and testers
-# See Also
----
-
-[[Database Software]]
-[[Vector Databases]]
-
+- ChromaDB team
+- Gradio team
+- Langflow team
