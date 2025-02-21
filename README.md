@@ -2,8 +2,6 @@
 
 ![Power Interface](/images/screenshot01.png)
 
-![Flow Diagram](/images/mermaid.png)
-
 ## Overview
 
 Chroma Auditor is a self-contained tool that enables business users to:
