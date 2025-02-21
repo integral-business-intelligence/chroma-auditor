@@ -310,8 +310,6 @@ Why Excel export:
 
 ## Future Development
 
-Planned enhancements:
-
 - Collection statistics and metrics
 - Source file archiving and retrieval
 - User authentication system
@@ -328,11 +326,9 @@ We welcome contributions! Please follow these steps:
 3. Make your changes
 4. Submit a pull request
 
-Please check our issues page for current needs.
-
 ## License
 
-This project is licensed under the MIT License - see [LICENSE.md](LICENSE.md) for details.
+This project is licensed under the MIT License
 
 ## Contact
 
