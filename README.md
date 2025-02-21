@@ -5,7 +5,7 @@
 ## Overview
 
 Chroma Auditor is a self-contained tool that enables business users to:
-- Inspect and understand what's in their ChromaDB
+- Inspect and understand what's in their [Chroma](https://github.com/chroma-core/chroma) vector database
 - See how their text is being chunked
 - Organize chunks into logical groups (files and File Sets)
 - Build confidence in RAG by providing traceability
@@ -39,7 +39,7 @@ Chroma Auditor serves as a companion tool that lets business users inspect their
 - Group files into File Sets
 
 ✅ AI support features
-- Document upload/ingestion via Langflow
+- Document upload/ingestion via [Langflow](https://github.com/langflow-ai/langflow)
 - Chat interface for RAG testing
 
 ## Screenshots
