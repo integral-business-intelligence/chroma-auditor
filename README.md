@@ -78,7 +78,7 @@ Chat with Files:
 - Gradio
 	- Works with Gradio 5.15.0
 - Langflow (optional but recommended)
-	- Works with Langflow 
+	- Works with Langflow v1.1.4.post1
 - Ollama (optional)
     - Embedding model
     - LLM
