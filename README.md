@@ -1,5 +1,7 @@
 # Chroma Auditor
 
+![Power Interface](/images/screenshot01.png)
+
 ![Flow Diagram](/images/mermaid.png)
 
 ## Overview
@@ -43,11 +45,11 @@ Chroma Auditor serves as a companion tool that lets business users inspect their
 
 ## Screenshots
 
-Basic Interface:
-![Basic Interface](/images/screenshot01.png)
-
 Power Interface:
-![Power Interface](/images/screenshot02.png)
+![Power Interface](/images/screenshot01.png)
+
+Basic Interface:
+![Basic Interface](/images/screenshot02.png)
 
 Upload Document:
 ![Upload Documents](/images/screenshot03.png)
