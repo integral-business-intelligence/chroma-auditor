@@ -1,5 +1,7 @@
 # Chroma Auditor
 
+![Flow Diagram](/images/mermaid.png)
+
 ## Overview
 
 Chroma Auditor is a self-contained tool that enables business users to:
@@ -41,12 +43,16 @@ Chroma Auditor serves as a companion tool that lets business users inspect their
 
 ## Screenshots
 
+Basic Interface:
 ![Basic Interface](/images/screenshot01.png)
 
+Power Interface:
 ![Power Interface](/images/screenshot02.png)
 
+Upload Document:
 ![Upload Documents](/images/screenshot03.png)
 
+Chat with Files:
 ![Chat Interface](/images/screenshot04.png)
 
 ## How it works
