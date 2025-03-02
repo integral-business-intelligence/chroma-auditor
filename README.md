@@ -296,16 +296,10 @@ Why Excel export:
 
 ## Known Issues
 
-
-~~1. Collection Corruption~~ Fixed in v0.1.1-Beta
-	~~- Emptying collections can cause corruption of the Chroma collection~~
-	~~- Symptom: the RAG chat returns errors indicating that the retrieved chunks are unreadable.~~
-	~~- Workaround: delete the collection, create a new collection, and restart there. In other words, for now, don't empty out a collection unless you're willing to do this. Also, remember, Chroma Auditor works with one collection name specified in the Chroma component(s) in Langflow. So, if you do need to delete a collection and create a new one, you need to update these entries in Langflow if you want to upload documents and chat using the Chroma Auditor interface.~~
-
-2. Database file path
+1. Database file path
 	- The current code allows users to input any path on the server's file system. For a more secure deployment, you might want to implement authentication to control who can access the interface.
 
-3. Metadata Handling
+2. Metadata Handling
 	- Tagging chunks with the embedding model name requires use of a custom Chroma component in Langflow.
 	- All other metadata operations are handled with Chroma Auditor.
 	- Deleting metadata is performed in two ways. When there is only a single key-value to delete from a chunk, we have only been able to delete via SQLite directly. When a key holds multiple values, we have been able to delete with the Chroma API.
