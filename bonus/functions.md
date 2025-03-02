@@ -158,6 +158,7 @@
 - **Behavior**: 
   - Removes entries from ChromaDB
   - Updates view after deletion
+  - If the entries/chunks deleted are the last chunks in a collection, emptying the collection, then a few additional steps are taken to prevent conflicts that can arise due to orphaned HNSW segment directories. The collection is deleted, the HNSW segment directory is deleted, the collection is recreated with the same name. Then, when a user adds chunks again to this collection, a new HNSW segment directory is created automatically. 
 - **Usage**: Used in both interfaces
 
 ## Document Upload Functions
