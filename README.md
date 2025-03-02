@@ -251,6 +251,7 @@ The tool provides two interfaces that serve different purposes:
 
 ### Delete Chunks
 - Deletes selected chunks from the database. Be careful there are no safeties.
+- Deleting all chunks in a collection (emptying the collection) results in the collection being deleted, the HNSW segment directory (associated with the collection) being deleted to prevent it from becoming an orphan and causing conflicts, and the creation of a new collection with the same name (re-creation). So, the collection persists in name but, when documents are uploaded, a new HNSW segment directory will be created and become associated with this collection name.
 
 ### Export to Excel/CSV
 
