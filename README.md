@@ -279,6 +279,9 @@ Why Excel export:
 - Compliance & Auditing:
 	- Document what content is in the vector database
 	- Track changes and versions of chunks
+
+Check out our companion tool [CSV Tractor Feed](https://github.com/integral-business-intelligence/csv-tractor-feed) which is a text splitter for ingesting CSV files. By exporting to CSV using Chroma Auditor and ingesting from CSV using CSV Tractor Feed, users can easily transport specific text chunks between AI workflows using familiar business tools. No coding required.
+
 ### Document Uploading (bonus feature)
 - Interface users can send files into an ingestion pipeline in Langflow where the result is vector embeddings stored in Chroma. Uploading via Chroma Auditor will automatically add metadata identifying the source file and, optionally, users can specify a File Set. 
 - Text splitting technique and embedding model are managed in Langflow. This is discussed in our design philosophy section.
