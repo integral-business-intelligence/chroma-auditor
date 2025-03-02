@@ -772,7 +772,8 @@ def handle_select(evt: gr.SelectData, state, df):
 
 def delete_entries(db_path, collection_name, selected_indices, df, view_type, view_value):
     """
-    Deletes selected entries and reloads the appropriate view
+    Deletes selected entries and reloads the appropriate view.
+    For complete collection emptying, deletes and recreates the collection.
     """
     print(f"\nDeleting entries:")
     print(f"View Type: {view_type}")
@@ -785,19 +786,74 @@ def delete_entries(db_path, collection_name, selected_indices, df, view_type, vi
     try:
         client = chromadb.PersistentClient(path=db_path)
         collection = client.get_collection(collection_name)
-        selected_ids = [df.iloc[idx]['ID'] for idx in selected_indices]
-        collection.delete(ids=selected_ids)
+        
+        # Get total count and selected IDs
+        total_count = collection.count()
+        selected_ids = [df.iloc[idx]['ID'] for idx in selected_indices if idx < len(df)]
+        
+        print(f"Total documents in collection: {total_count}")
+        print(f"Number of documents to delete: {len(selected_ids)}")
+        
+        # Check if we're deleting all documents
+        if len(selected_ids) >= total_count:
+            print("DETECTED: Deleting all documents from collection!")
+            
+            try:
+                # Reuse the exact same approach as your checker script
+                # Get UUID before deleting collection
+                import sqlite3
+                conn = sqlite3.connect(f"{db_path}/chroma.sqlite3")
+                cursor = conn.cursor()
+                
+                # Query for vector segment ID associated with this collection
+                cursor.execute("""
+                    SELECT s.id 
+                    FROM segments s 
+                    JOIN collections c ON s.collection = c.id 
+                    WHERE c.name = ? AND s.scope = 'VECTOR'
+                """, (collection_name,))
+                
+                uuid_dir = cursor.fetchone()
+                conn.close()
+                
+                # Delete collection through API
+                client.delete_collection(name=collection_name)
+                print(f"Collection {collection_name} deleted")
+                
+                # Delete UUID directory if found
+                if uuid_dir and uuid_dir[0]:
+                    uuid_path = os.path.join(db_path, uuid_dir[0])
+                    if os.path.exists(uuid_path):
+                        import shutil
+                        shutil.rmtree(uuid_path)
+                        print(f"UUID directory {uuid_dir[0]} deleted")
+                
+                # Recreate the collection
+                client.create_collection(name=collection_name)
+                print(f"Collection {collection_name} recreated")
+                
+                status = "Collection has been completely reset (deleted and recreated)"
+                
+            except Exception as e:
+                print(f"Error during collection reset: {e}")
+                # Fallback to standard deletion if the reset fails
+                collection.delete(ids=selected_ids)
+                status = "Deleted documents using standard method"
+        else:
+            # Normal deletion for subset of documents
+            collection.delete(ids=selected_ids)
+            status = f"Deleted {len(selected_ids)} documents"
         
         # Reload based on view type
         if view_type == "file":
-            updated_df, status = load_file_chunks(
+            updated_df, _ = load_file_chunks(
                 db_path=db_path,
                 filename=view_value,
                 collection_name=collection_name,
                 key="source_file"
             )
         elif view_type == "fileset":
-            updated_df, status = load_fileset_documents(
+            updated_df, _ = load_fileset_documents(
                 fileset_name=view_value,
                 collection_name=collection_name,
                 db_path=db_path
@@ -805,7 +861,6 @@ def delete_entries(db_path, collection_name, selected_indices, df, view_type, vi
         else:  # collection view
             print("Loading entire collection view")
             updated_df = load_collection(collection_name, db_path)
-            status = "Selected entries deleted"
             print(f"Loaded collection with {len(updated_df)} rows")
         
         return updated_df, status
@@ -1046,7 +1101,7 @@ def handle_chat_with_selection(message: str, history: list, selected_file: str, 
         response = requests.post(
             f"{LANGFLOW_API_URL}/api/v1/run/{CHAT_FLOW_ID}?stream=false",
             json=payload,
-            timeout=30
+            timeout=300
         ).json()
 
         print(f"[{request_id}] Response received in {(time.time() - start_time):.2f}s")
