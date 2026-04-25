@@ -28,9 +28,72 @@ from pathlib import Path
 
 import chromadb
 from rich.console import Console
-from rich.prompt import Prompt
+from rich.prompt import Prompt  # used for file path prompt
+from rich.rule import Rule
 
 console = Console()
+
+
+def _read_secret(label: str) -> str:
+    """Prompt for a secret value, echoing '*' for each character typed or pasted."""
+    console.print(Rule(f"[bold cyan]{label}[/bold cyan]", style="cyan"))
+    console.print(
+        "  [dim]Paste or type your key, then press [bold]Enter[/bold]. "
+        "Input is masked.[/dim]"
+    )
+    console.print("  > ", end="", highlight=False)
+
+    try:
+        import tty
+        import termios
+
+        chars: list[str] = []
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            while True:
+                ch = sys.stdin.read(1)
+                if ch in ("\r", "\n"):
+                    break
+                elif ch == "\x7f":  # backspace
+                    if chars:
+                        chars.pop()
+                        sys.stdout.write("\b \b")
+                        sys.stdout.flush()
+                elif ch == "\x03":  # Ctrl+C
+                    console.print()
+                    raise KeyboardInterrupt
+                elif ord(ch) >= 32:  # printable (includes all pasted chars)
+                    chars.append(ch)
+                    sys.stdout.write("*")
+                    sys.stdout.flush()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        console.print()
+        return "".join(chars)
+
+    except (ImportError, AttributeError):
+        # Windows fallback — no asterisk echo, but paste still works
+        import msvcrt
+        chars = []
+        while True:
+            ch = msvcrt.getwch()
+            if ch in ("\r", "\n"):
+                break
+            elif ch == "\x08":  # backspace
+                if chars:
+                    chars.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+            elif ch == "\x03":
+                raise KeyboardInterrupt
+            else:
+                chars.append(ch)
+                sys.stdout.write("*")
+                sys.stdout.flush()
+        console.print()
+        return "".join(chars)
 
 # Embeddings endpoint — change this to point at a proxy or compatible API.
 OPENAI_API_BASE = "https://api.openai.com/v1"
@@ -220,10 +283,10 @@ def main() -> None:
             sys.exit(1)
         args.inputs = [raw]
 
-    # ── API key: flag → env var → interactive prompt ───────────────────────────
+    # ── API key: flag → env var → interactive masked prompt ───────────────────
     api_key = args.api_key or os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
-        api_key = Prompt.ask("[cyan]OpenAI API key[/cyan]", password=True).strip()
+        api_key = _read_secret("Paste API Key").strip()
     if not api_key:
         console.print("[red]No API key provided. Exiting.[/red]")
         sys.exit(1)
