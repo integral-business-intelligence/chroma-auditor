@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 """
-Chroma Ingest Helper — load documents into ChromaDB using OpenAI embeddings.
+Chroma Ingest Helper — load plain-text documents into ChromaDB using OpenAI embeddings.
 
-Reads .txt, .md, .pdf, and .docx files, splits them into overlapping chunks,
-embeds them with OpenAI, and stores them in a ChromaDB collection with
-metadata compatible with Chroma Auditor (source_file, chunk_index,
-total_chunks, upload_timestamp, and an optional fileset tag).
+Dev-testing utility for populating a ChromaDB instance so you can exercise
+Chroma Auditor's chunk management and metadata inspection features.
+
+Only .txt and .md files are supported (no extra parsing dependencies).
 
 Requires:
-    pip install openai pypdf python-docx
-
+    pip install openai
     OPENAI_API_KEY environment variable, or pass --api-key.
 
 Usage examples:
-    python bonus/ingest.py report.pdf
+    python bonus/ingest.py                              # interactive prompt
+    python bonus/ingest.py notes.md
     python bonus/ingest.py docs/ --db ./my-chroma --collection research
-    python bonus/ingest.py notes.pdf --fileset "project-alpha"
+    python bonus/ingest.py notes.md --fileset "project-alpha"
     python bonus/ingest.py *.txt --chunk-size 500 --overlap 100
-    python bonus/ingest.py report.pdf --model text-embedding-3-large
 """
 
 import argparse
@@ -29,51 +28,37 @@ from pathlib import Path
 
 import chromadb
 from rich.console import Console
+from rich.prompt import Prompt
 
 console = Console()
 
-SUPPORTED = {".txt", ".md", ".pdf", ".docx"}
+SUPPORTED = {".txt", ".md"}
+
+DISCLAIMER = (
+    "[dim]Disclaimer: This is a dev-testing utility for populating a ChromaDB instance "
+    "to exercise Chroma Auditor's chunk management and metadata inspection features. "
+    "It is not intended for production ingestion workflows.[/dim]"
+)
+
+NOTE_FILES = (
+    "[yellow]Note:[/yellow] Only [bold].txt[/bold] and [bold].md[/bold] files are supported. "
+    "No additional parsing libraries are required."
+)
+
+NOTE_CHUNKING = (
+    "[yellow]Note:[/yellow] Chunking uses a simple character-based splitter "
+    "(default 1000 chars, 200-char overlap) that breaks preferentially at "
+    "paragraph boundaries, then line breaks, then sentence ends, then word boundaries."
+)
 
 # ─── Document reading ─────────────────────────────────────────────────────────
 
-def read_txt(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="replace")
-
-
-def read_pdf(path: Path) -> str:
-    try:
-        import pypdf
-    except ImportError:
-        raise RuntimeError("pypdf is required for PDF files:  pip install pypdf")
-    reader = pypdf.PdfReader(str(path))
-    return "\n".join(page.extract_text() or "" for page in reader.pages)
-
-
-def read_docx(path: Path) -> str:
-    try:
-        import docx
-    except ImportError:
-        raise RuntimeError(
-            "python-docx is required for DOCX files:  pip install python-docx"
-        )
-    doc = docx.Document(str(path))
-    return "\n".join(p.text for p in doc.paragraphs)
-
-
 def read_file(path: Path) -> str:
-    ext = path.suffix.lower()
-    if ext in {".txt", ".md"}:
-        return read_txt(path)
-    elif ext == ".pdf":
-        return read_pdf(path)
-    elif ext == ".docx":
-        return read_docx(path)
-    raise ValueError(f"Unsupported file type: {ext}")
+    return path.read_text(encoding="utf-8", errors="replace")
 
 # ─── Text splitting ───────────────────────────────────────────────────────────
 
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
-    """Split text into overlapping chunks, breaking at natural boundaries."""
     text = text.strip()
     if not text:
         return []
@@ -99,7 +84,6 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[st
 # ─── Embedding setup ──────────────────────────────────────────────────────────
 
 def get_embedding_function(api_key: str, model: str):
-    """Return a ChromaDB OpenAI embedding function."""
     try:
         from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
     except ImportError:
@@ -107,7 +91,7 @@ def get_embedding_function(api_key: str, model: str):
         console.print("Ensure chromadb is installed:  pip install chromadb")
         sys.exit(1)
     try:
-        import openai  # noqa: F401 — confirm the package is present
+        import openai  # noqa: F401
     except ImportError:
         console.print("[red]openai package not found.[/red]")
         console.print("Install it with:  pip install openai")
@@ -150,7 +134,6 @@ def ingest_file(
 # ─── File discovery ───────────────────────────────────────────────────────────
 
 def resolve_inputs(inputs: list[str]) -> list[Path]:
-    """Expand files and directories into a sorted list of supported paths."""
     paths: list[Path] = []
     for raw in inputs:
         p = Path(raw)
@@ -162,6 +145,7 @@ def resolve_inputs(inputs: list[str]) -> list[Path]:
                 paths.append(p)
             else:
                 console.print(f"[yellow]Skipping unsupported file type: {p.name}[/yellow]")
+                console.print(f"  Only .txt and .md files are accepted.")
         else:
             console.print(f"[yellow]Not found, skipping: {raw}[/yellow]")
     return paths
@@ -170,13 +154,14 @@ def resolve_inputs(inputs: list[str]) -> list[Path]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Ingest documents into ChromaDB using OpenAI embeddings.",
+        description="Ingest .txt/.md documents into ChromaDB using OpenAI embeddings.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
     parser.add_argument(
-        "inputs", nargs="+", metavar="FILE_OR_DIR",
-        help="Files or directories to ingest (.txt .md .pdf .docx).",
+        "inputs", nargs="*", metavar="FILE_OR_DIR",
+        help="Files or directories to ingest (.txt and .md only). "
+             "Omit to be prompted interactively.",
     )
     parser.add_argument(
         "--db", default="./chroma", metavar="PATH",
@@ -208,7 +193,27 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Resolve API key
+    # ── Header ────────────────────────────────────────────────────────────────
+    console.print()
+    console.print("[bold]Chroma Ingest Helper[/bold]")
+    console.print("─" * 58)
+    console.print(NOTE_FILES)
+    console.print(NOTE_CHUNKING)
+    console.print(DISCLAIMER)
+    console.print("─" * 58)
+    console.print()
+
+    # ── Interactive file prompt if no inputs given ─────────────────────────────
+    if not args.inputs:
+        raw = Prompt.ask(
+            "[cyan]Enter path to a .txt or .md file (or a directory)[/cyan]"
+        ).strip()
+        if not raw:
+            console.print("[red]No path entered. Exiting.[/red]")
+            sys.exit(1)
+        args.inputs = [raw]
+
+    # ── API key ────────────────────────────────────────────────────────────────
     api_key = args.api_key or os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         console.print("[red]No OpenAI API key found.[/red]")
@@ -218,10 +223,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Print config summary
-    console.print()
-    console.print("[bold]Chroma Ingest Helper[/bold]")
-    console.print("─" * 42)
+    # ── Config summary ─────────────────────────────────────────────────────────
     console.print(f"  Database:   [cyan]{os.path.abspath(args.db)}[/cyan]")
     console.print(f"  Collection: [cyan]{args.collection}[/cyan]")
     console.print(f"  Model:      [cyan]{args.model}[/cyan]")
@@ -231,14 +233,14 @@ def main() -> None:
         console.print(f"  Fileset:    [cyan]{args.fileset}[/cyan]")
     console.print()
 
-    # Resolve input files
+    # ── Resolve files ──────────────────────────────────────────────────────────
     files = resolve_inputs(args.inputs)
     if not files:
-        console.print("[red]No supported files found.[/red]")
+        console.print("[red]No supported files found. Only .txt and .md are accepted.[/red]")
         sys.exit(1)
     console.print(f"Found [bold]{len(files)}[/bold] file(s) to process.\n")
 
-    # Set up embedding function and connect to ChromaDB
+    # ── Connect to ChromaDB ────────────────────────────────────────────────────
     ef = get_embedding_function(api_key, args.model)
     try:
         client = chromadb.PersistentClient(path=args.db)
@@ -249,7 +251,7 @@ def main() -> None:
         console.print(f"[red]Failed to connect to ChromaDB: {e}[/red]")
         sys.exit(1)
 
-    # Ingest
+    # ── Ingest ─────────────────────────────────────────────────────────────────
     total_chunks = 0
     failed = 0
     for path in files:
@@ -261,9 +263,9 @@ def main() -> None:
             failed += 1
             console.print(f"  [red]✗[/red] {path.name:<42} {e}")
 
-    # Summary
+    # ── Summary ────────────────────────────────────────────────────────────────
     console.print()
-    console.print("─" * 42)
+    console.print("─" * 58)
     success = len(files) - failed
     summary = f"  [bold]Done.[/bold]  {total_chunks} chunk(s) ingested from {success} file(s)."
     if failed:
