@@ -9,7 +9,7 @@ Only .txt and .md files are supported (no extra parsing dependencies).
 
 Requires:
     pip install openai
-    OPENAI_API_KEY environment variable, or pass --api-key.
+    OPENAI_API_KEY environment variable, or enter key when prompted.
 
 Usage examples:
     python bonus/ingest.py                              # interactive prompt
@@ -31,6 +31,10 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 console = Console()
+
+# Embeddings endpoint — change this to point at a proxy or compatible API.
+OPENAI_API_BASE = "https://api.openai.com/v1"
+DEFAULT_MODEL   = "text-embedding-3-small"
 
 SUPPORTED = {".txt", ".md"}
 
@@ -81,22 +85,21 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[st
         start = max(start + 1, end - overlap)
     return chunks
 
-# ─── Embedding setup ──────────────────────────────────────────────────────────
+# ─── Embeddings ───────────────────────────────────────────────────────────────
 
-def get_embedding_function(api_key: str, model: str):
+def embed_texts(texts: list[str], api_key: str, model: str) -> list[list[float]]:
+    """Call the OpenAI embeddings endpoint and return one vector per input text."""
     try:
-        from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
-    except ImportError:
-        console.print("[red]Could not import OpenAIEmbeddingFunction from chromadb.[/red]")
-        console.print("Ensure chromadb is installed:  pip install chromadb")
-        sys.exit(1)
-    try:
-        import openai  # noqa: F401
+        import openai
     except ImportError:
         console.print("[red]openai package not found.[/red]")
         console.print("Install it with:  pip install openai")
         sys.exit(1)
-    return OpenAIEmbeddingFunction(api_key=api_key, model_name=model)
+
+    client = openai.OpenAI(api_key=api_key, base_url=OPENAI_API_BASE)
+    response = client.embeddings.create(input=texts, model=model)
+    # Results may not be returned in input order — sort by index to be safe.
+    return [item.embedding for item in sorted(response.data, key=lambda x: x.index)]
 
 # ─── Ingestion ────────────────────────────────────────────────────────────────
 
@@ -106,12 +109,16 @@ def ingest_file(
     chunk_size: int,
     overlap: int,
     fileset: str | None,
+    api_key: str,
+    model: str,
 ) -> int:
-    """Chunk and embed one file; return the number of chunks stored."""
+    """Chunk, embed, and store one file; return the number of chunks stored."""
     text = read_file(path)
     chunks = chunk_text(text, chunk_size, overlap)
     if not chunks:
         return 0
+
+    embeddings = embed_texts(chunks, api_key, model)
 
     timestamp = datetime.now().isoformat()
     total = len(chunks)
@@ -128,7 +135,7 @@ def ingest_file(
             meta["fileset"] = fileset
         metadatas.append(meta)
 
-    collection.add(ids=ids, documents=chunks, metadatas=metadatas)
+    collection.add(ids=ids, documents=chunks, metadatas=metadatas, embeddings=embeddings)
     return total
 
 # ─── File discovery ───────────────────────────────────────────────────────────
@@ -145,7 +152,7 @@ def resolve_inputs(inputs: list[str]) -> list[Path]:
                 paths.append(p)
             else:
                 console.print(f"[yellow]Skipping unsupported file type: {p.name}[/yellow]")
-                console.print(f"  Only .txt and .md files are accepted.")
+                console.print("  Only .txt and .md files are accepted.")
         else:
             console.print(f"[yellow]Not found, skipping: {raw}[/yellow]")
     return paths
@@ -184,12 +191,12 @@ def main() -> None:
         help="Overlap between consecutive chunks in characters (default: 200).",
     )
     parser.add_argument(
-        "--model", default="text-embedding-3-small", metavar="MODEL",
-        help="OpenAI embedding model (default: text-embedding-3-small).",
+        "--model", default=DEFAULT_MODEL, metavar="MODEL",
+        help=f"OpenAI embedding model (default: {DEFAULT_MODEL}).",
     )
     parser.add_argument(
         "--api-key", default=None, metavar="KEY",
-        help="OpenAI API key. Falls back to OPENAI_API_KEY env var.",
+        help="OpenAI API key. Falls back to OPENAI_API_KEY env var, then prompts.",
     )
     args = parser.parse_args()
 
@@ -213,20 +220,19 @@ def main() -> None:
             sys.exit(1)
         args.inputs = [raw]
 
-    # ── API key ────────────────────────────────────────────────────────────────
+    # ── API key: flag → env var → interactive prompt ───────────────────────────
     api_key = args.api_key or os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
-        console.print("[red]No OpenAI API key found.[/red]")
-        console.print(
-            "Set the [bold]OPENAI_API_KEY[/bold] environment variable "
-            "or pass [bold]--api-key[/bold]."
-        )
+        api_key = Prompt.ask("[cyan]OpenAI API key[/cyan]", password=True).strip()
+    if not api_key:
+        console.print("[red]No API key provided. Exiting.[/red]")
         sys.exit(1)
 
     # ── Config summary ─────────────────────────────────────────────────────────
+    console.print(f"  Endpoint:   [cyan]{OPENAI_API_BASE}/embeddings[/cyan]")
+    console.print(f"  Model:      [cyan]{args.model}[/cyan]")
     console.print(f"  Database:   [cyan]{os.path.abspath(args.db)}[/cyan]")
     console.print(f"  Collection: [cyan]{args.collection}[/cyan]")
-    console.print(f"  Model:      [cyan]{args.model}[/cyan]")
     console.print(f"  Chunk size: [cyan]{args.chunk_size}[/cyan]  "
                   f"Overlap: [cyan]{args.overlap}[/cyan]")
     if args.fileset:
@@ -241,12 +247,10 @@ def main() -> None:
     console.print(f"Found [bold]{len(files)}[/bold] file(s) to process.\n")
 
     # ── Connect to ChromaDB ────────────────────────────────────────────────────
-    ef = get_embedding_function(api_key, args.model)
     try:
         client = chromadb.PersistentClient(path=args.db)
-        collection = client.get_or_create_collection(
-            name=args.collection, embedding_function=ef
-        )
+        # No embedding function on the collection — embeddings are provided explicitly.
+        collection = client.get_or_create_collection(name=args.collection)
     except Exception as e:
         console.print(f"[red]Failed to connect to ChromaDB: {e}[/red]")
         sys.exit(1)
@@ -256,7 +260,11 @@ def main() -> None:
     failed = 0
     for path in files:
         try:
-            n = ingest_file(path, collection, args.chunk_size, args.overlap, args.fileset)
+            n = ingest_file(
+                path, collection,
+                args.chunk_size, args.overlap, args.fileset,
+                api_key, args.model,
+            )
             total_chunks += n
             console.print(f"  [green]✓[/green] {path.name:<42} {n} chunk(s)")
         except Exception as e:
