@@ -1,3 +1,4 @@
 chromadb==0.6.3
 chroma-hnswlib==0.7.6
-gradio==5.15.0
+textual>=0.70.0
+rich>=13.0
